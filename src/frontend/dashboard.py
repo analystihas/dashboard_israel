@@ -132,11 +132,14 @@ class VizReceitas:
             fig.add_trace(go.Scatter(
                 x=df['DATA'],
                 y=df['VALOR_TOTAL'],
-                mode='lines+markers',
+                mode='lines+markers+text',
                 name='Receita',
                 fill='tozeroy',
                 line=dict(color='#667eea', width=3),
-                marker=dict(size=8, color='#764ba2')
+                marker=dict(size=8, color='#764ba2'),
+                text=[f'R$ {val:,.2f}' for val in df['VALOR_TOTAL']],
+                textposition='top center',
+                textfont=dict(size=10, color="#F2ECEC")
             ))
             
             fig.update_layout(
