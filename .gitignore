@@ -1,7 +1,12 @@
 # Byte-compiled / optimized / DLL files
 # curl -o .gitignore https://raw.githubusercontent.com/github/gitignore/main/Python.gitignore
-
+### 4. **Adicione ao .gitignore**
+```
 .env
+*.json
+credentials/
+secrets/
+
 __pycache__/
 *.py[codz]
 *$py.class

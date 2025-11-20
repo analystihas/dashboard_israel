@@ -10,17 +10,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
-business_data = BusinessData()
-
-dados_receitas = business_data.get_receitas()
-dados_despesas = business_data.get_despesas()
-dados_peso_notas = business_data.get_peso_notas()
 
 class VizReceitas:
     def __init__(self):
-        self.dados_receitas = dados_receitas
-        self.dados_despesas = dados_despesas
-        self.dados_peso = dados_peso_notas
+        self.reload_data()
 
 
     def reload_data(self):
@@ -33,6 +26,8 @@ class VizReceitas:
         if 'DATA' in self.dados_despesas.columns:
             self.dados_despesas['DATA'] = pd.to_datetime(self.dados_despesas['DATA'])
         self.dados_peso['DATA'] = pd.to_datetime(self.dados_peso['DATA'])
+
+        self.last_update = datetime.now()
         
     def set_title(self):
         st.set_page_config(page_title="Dashboard Financeiro", layout="wide", initial_sidebar_state="expanded")
@@ -383,6 +378,7 @@ class VizReceitas:
                 # Top 5 maiores despesas
                 st.markdown("#### 🔝 Top 5 Maiores Despesas")
                 top_despesas = df.nlargest(5, 'VALOR')[[categoria_col, 'VALOR', 'DATA']]
+                top_despesas['DATA'] = top_despesas['DATA'].dt.strftime('%Y-%m-%d')
                 
                 for idx, row in top_despesas.iterrows():
                     st.markdown(f"""
@@ -400,22 +396,28 @@ class VizReceitas:
         tab1, tab2, tab3 = st.tabs(["💰 Receitas", "💸 Despesas", "⚖️ Peso das Notas"])
         
         with tab1:
+            df_to_show_receitas = self.dados_receitas.copy()
+            df_to_show_receitas['DATA'] = df_to_show_receitas['DATA'].dt.strftime('%Y-%m-%d')
             st.dataframe(
-                self.dados_receitas.sort_values('DATA', ascending=False),
+                df_to_show_receitas.sort_values('DATA', ascending=False),
                 use_container_width=True,
                 height=400
             )
             
         with tab2:
+            df_to_show_despesas = self.dados_despesas.copy()
+            df_to_show_despesas['DATA'] = df_to_show_despesas['DATA'].dt.strftime('%Y-%m-%d')
             st.dataframe(
-                self.dados_despesas.sort_values('DATA', ascending=False) if 'DATA' in self.dados_despesas.columns else self.dados_despesas,
+                df_to_show_despesas.sort_values('DATA', ascending=False) if 'DATA' in df_to_show_despesas.columns else df_to_show_despesas,
                 use_container_width=True,
                 height=400
             )
             
         with tab3:
+            df_to_show_peso_notas = self.dados_peso.copy()
+            df_to_show_peso_notas['DATA'] = df_to_show_peso_notas['DATA'].dt.strftime('%Y-%m-%d')
             st.dataframe(
-                self.dados_peso.sort_values('DATA', ascending=False),
+                df_to_show_peso_notas.sort_values('DATA', ascending=False),
                 use_container_width=True,
                 height=400
             )
@@ -424,8 +426,13 @@ class VizReceitas:
         """Renderiza todo o dashboard"""
         self.set_title()
         if st.button("🔄 Atualizar dados"):
-            self.reload_data()
-            st.rerun() 
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            with st.spinner("Carregando dados do banco..."):
+                self.reload_data()
+            st.success("Dados atualizados com sucesso!")
+            st.rerun()
+
         self.show_kpis()
         self.show_receitas_evolution()
         self.show_notas_analysis()
@@ -433,3 +440,5 @@ class VizReceitas:
         self.show_despesas_breakdown()
         st.markdown("---")
         self.show_data_table()
+        st.markdown(
+    f"🕒 **Última atualização:** {self.last_update.strftime('%d/%m/%Y %H:%M:%S')}")
