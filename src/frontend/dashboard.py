@@ -28,23 +28,25 @@ class VizReceitas:
         self.dados_peso['DATA'] = pd.to_datetime(self.dados_peso['DATA'])
 
         self.last_update = datetime.now() - timedelta(hours=3)
-        
+        # default period
+        self.periodo = "Todo período"
+        # filtered frames will be criados quando apply_period_filter for chamado
+
     def set_title(self):
         st.set_page_config(page_title="Dashboard Financeiro", layout="wide", initial_sidebar_state="expanded")
         
-        # Header com estilo
         st.markdown("""
             <style>
             .main-header {
                 font-size: 3rem;
                 font-weight: 700;
-                background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+                background: linear-gradient(90deg, #4caf50 0%, #2e7d32 100%);
                 -webkit-background-clip: text;
                 -webkit-text-fill-color: transparent;
                 margin-bottom: 0.5rem;
             }
             .metric-card {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
                 padding: 1.5rem;
                 border-radius: 10px;
                 color: white;
@@ -56,36 +58,52 @@ class VizReceitas:
         st.markdown('<h1 class="main-header">📊 Dashboard Financeiro</h1>', unsafe_allow_html=True)
         st.markdown("---")
 
-    def show_kpis(self):
-        """Exibe KPIs principais"""
-        # Preparar dados
-        df_rec = self.dados_receitas.copy()
-        df_desp = self.dados_despesas.copy()
-        
-        # Filtro de período
-        col1, col2, col3 = st.columns([2, 2, 6])
-        with col1:
-            periodo = st.selectbox("Período", ["Últimos 7 dias", "Últimos 30 dias", "Últimos 90 dias", "Todo período"])
-        
-        # Aplicar filtro
+
+    def apply_period_filter(self):
+        """Aplica o filtro de período e popula atributos filtrados:
+        self.df_rec_filtrado, self.df_desp_filtrado, self.df_peso_filtrado
+        """
         hoje = pd.Timestamp.now()
-        if periodo == "Últimos 7 dias":
+        if self.periodo == "Últimos 7 dias":
             data_inicio = hoje - timedelta(days=7)
-        elif periodo == "Últimos 30 dias":
+        elif self.periodo == 'Últimos 3 dias':
+            data_inicio = hoje - timedelta(days=3)
+        elif self.periodo == 'Últimos 14 dias':
+            data_inicio = hoje - timedelta(days=14)
+        elif self.periodo == "Últimos 30 dias":
             data_inicio = hoje - timedelta(days=30)
-        elif periodo == "Últimos 90 dias":
+        elif self.periodo == "Últimos 90 dias":
             data_inicio = hoje - timedelta(days=90)
         else:
-            data_inicio = df_rec['DATA'].min()
-        
-        df_rec_filtrado = df_rec[df_rec['DATA'] >= data_inicio]
-        df_desp_filtrado = df_desp[df_desp['DATA'] >= data_inicio] if 'DATA' in df_desp.columns else df_desp
+            data_inicio = self.dados_receitas['DATA'].min()
+
+        # Receitas
+        df_rec = self.dados_receitas.copy()
+        self.df_rec_filtrado = df_rec[df_rec['DATA'] >= data_inicio].copy() if not df_rec.empty else df_rec
+
+        # Despesas
+        if hasattr(self, 'dados_despesas') and 'DATA' in self.dados_despesas.columns:
+            df_desp = self.dados_despesas.copy()
+            self.df_desp_filtrado = df_desp[df_desp['DATA'] >= data_inicio].copy()
+        else:
+            # fallback: keep original
+            self.df_desp_filtrado = self.dados_despesas.copy()
+
+        # Peso das notas
+        df_peso = self.dados_peso.copy()
+        self.df_peso_filtrado = df_peso[df_peso['DATA'] >= data_inicio].copy() if not df_peso.empty else df_peso
+
+    def show_kpis(self):
+        """Exibe KPIs principais"""
+        # Usar frames filtrados (se existirem)
+        df_rec = getattr(self, 'df_rec_filtrado', self.dados_receitas).copy()
+        df_desp = getattr(self, 'df_desp_filtrado', self.dados_despesas).copy()
         
         # Calcular métricas
-        total_receitas = df_rec_filtrado['VALOR_TOTAL'].sum()
-        total_despesas = df_desp_filtrado['VALOR'].sum() if 'VALOR' in df_desp_filtrado.columns else 0
+        total_receitas = df_rec['VALOR_TOTAL'].sum()
+        total_despesas = df_desp['VALOR'].sum() if 'VALOR' in df_desp.columns else 0
         lucro = total_receitas - total_despesas
-        total_notas = df_rec_filtrado['NOTAS_REALIZADAS'].sum()
+        total_notas = df_rec['NOTAS_REALIZADAS'].sum() if 'NOTAS_REALIZADAS' in df_rec.columns else 0
         ticket_medio = total_receitas / total_notas if total_notas > 0 else 0
         
         # Exibir KPIs
@@ -124,62 +142,158 @@ class VizReceitas:
         st.markdown("---")
 
     def show_receitas_evolution(self):
-        """Gráfico de evolução de receitas"""
-        df = self.dados_receitas.copy()
+        """Gráfico de evolução das receitas"""
+        df = getattr(self, 'df_rec_filtrado', self.dados_receitas).copy()
+
+        # garantir DATA como datetime (importante para range/padding)
+        df['DATA'] = pd.to_datetime(df['DATA'])
         df = df.sort_values('DATA')
-        
-        col1, col2 = st.columns([7, 3])
-        
+
+        # cálculo de padding no eixo X para evitar corte do último ponto
+        min_dt = df['DATA'].min()
+        max_dt = df['DATA'].max()
+        pad = pd.Timedelta(days=1)  # ajuste se precisar de mais/menos espaço
+        x_range = [min_dt - pad, max_dt + pad]
+
+        col1, col2 = st.columns([8, 2])
+
         with col1:
             st.markdown("### 📈 Evolução das Receitas")
-            
-            # Gráfico de linha com área
+
             fig = go.Figure()
-            
+
             fig.add_trace(go.Scatter(
                 x=df['DATA'],
                 y=df['VALOR_TOTAL'],
                 mode='lines+markers+text',
                 name='Receita',
                 fill='tozeroy',
-                line=dict(color='#667eea', width=3),
-                marker=dict(size=8, color='#764ba2'),
+                line=dict(color="#66ea73", width=3),
+                marker=dict(size=8, color="#14c72f"),
                 text=[f'R$ {val:,.2f}' for val in df['VALOR_TOTAL']],
                 textposition='top center',
-                textfont=dict(size=10, color="#F2ECEC")
+                textfont=dict(size=10, color="#F2ECEC"),
+                hovertemplate='Data: %{x|%d/%m/%Y}<br>Receita: R$ %{y:,.2f}<extra></extra>',
+                cliponaxis=False  # importante para não cortar os textos fora do plot
             ))
-            
+
+            # forçar range com padding, formato de tick e margens maiores
+            fig.update_xaxes(
+                tickformat='%d/%m/%Y',
+                range=x_range,
+                tickangle=0,
+                showgrid=True,
+                gridcolor='rgba(128,128,128,0.2)'
+            )
+
             fig.update_layout(
                 height=400,
                 hovermode='x unified',
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)'),
                 yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)', title='Valor (R$)'),
-                showlegend=False
+                showlegend=False,
+                autosize=True,
+                margin=dict(l=60, r=80, t=40, b=60)  # r aumentado para evitar corte pelo painel de estatísticas
             )
-            
+
             st.plotly_chart(fig, use_container_width=True)
-        
+
         with col2:
             st.markdown("### 📊 Estatísticas")
-            
-            receita_media = df['VALOR_TOTAL'].mean()
-            receita_max = df['VALOR_TOTAL'].max()
-            receita_min = df['VALOR_TOTAL'].min()
-            
+
+            receita_media = df['VALOR_TOTAL'].mean() if not df.empty else 0
+            receita_max = df['VALOR_TOTAL'].max() if not df.empty else 0
+            receita_min = df['VALOR_TOTAL'].min() if not df.empty else 0
+
             st.metric("Média Diária", f"R$ {receita_media:,.2f}")
             st.metric("Maior Receita", f"R$ {receita_max:,.2f}")
             st.metric("Menor Receita", f"R$ {receita_min:,.2f}")
-            
-            # Taxa de crescimento
-            if len(df) > 1:
+
+            if len(df) > 1 and df['VALOR_TOTAL'].iloc[0] != 0:
                 crescimento = ((df['VALOR_TOTAL'].iloc[-1] / df['VALOR_TOTAL'].iloc[0]) - 1) * 100
                 st.metric("Crescimento", f"{crescimento:+.1f}%")
 
+
+    def show_despesas_evolution(self):
+        """Gráfico de evolução das receitas"""
+        df = getattr(self, 'df_desp_filtrado', self.dados_despesas).copy()
+
+        df = df.groupby("DATA")["VALOR"].sum().reset_index()
+
+        # garantir DATA como datetime (importante para range/padding)
+        df['DATA'] = pd.to_datetime(df['DATA'])
+        df = df.sort_values('DATA')
+
+        # cálculo de padding no eixo X para evitar corte do último ponto
+        min_dt = df['DATA'].min()
+        max_dt = df['DATA'].max()
+        pad = pd.Timedelta(days=1)  # ajuste se precisar de mais/menos espaço
+        x_range = [min_dt - pad, max_dt + pad]
+
+        col1, col2 = st.columns([8, 2])
+
+        with col1:
+            st.markdown("### 📉 Evolução das Despesas")
+
+            fig = go.Figure()
+
+            fig.add_trace(go.Scatter(
+                x=df['DATA'],
+                y=df['VALOR'],
+                mode='lines+markers+text',
+                name='Despesa',
+                fill='tozeroy',
+                line=dict(color="#ea6a66", width=3),
+                marker=dict(size=8, color="#c72914"),
+                text=[f'R$ {val:,.2f}' for val in df['VALOR']],
+                textposition='top center',
+                textfont=dict(size=10, color="#F2ECEC"),
+                hovertemplate='Data: %{x|%d/%m/%Y}<br>Despesa: R$ %{y:,.2f}<extra></extra>',
+                cliponaxis=False  # importante para não cortar os textos fora do plot
+            ))
+
+            # forçar range com padding, formato de tick e margens maiores
+            fig.update_xaxes(
+                tickformat='%d/%m/%Y',
+                range=x_range,
+                tickangle=0,
+                showgrid=True,
+                gridcolor='rgba(128,128,128,0.2)'
+            )
+
+            fig.update_layout(
+                height=400,
+                hovermode='x unified',
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)', title='Valor (R$)'),
+                showlegend=False,
+                autosize=True,
+                margin=dict(l=60, r=80, t=40, b=60)  # r aumentado para evitar corte pelo painel de estatísticas
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            st.markdown("### 📊 Estatísticas")
+
+            despesa_media = df['VALOR'].mean() if not df.empty else 0
+            despesa_max = df['VALOR'].max() if not df.empty else 0
+            despesa_min = df['VALOR'].min() if not df.empty else 0
+
+            st.metric("Média Diária", f"R$ {despesa_media:,.2f}")
+            st.metric("Maior Despesa", f"R$ {despesa_max:,.2f}")
+            st.metric("Menor Despesa", f"R$ {despesa_min:,.2f}")
+
+            if len(df) > 1 and df['VALOR'].iloc[0] != 0:
+                crescimento = ((df['VALOR'].iloc[-1] / df['VALOR'].iloc[0]) - 1) * 100
+                st.metric("Crescimento", f"{crescimento:+.1f}%")
+
+
     def show_notas_analysis(self):
         """Análise de notas leves vs pesadas"""
-        df = self.dados_peso.copy()
+        df = getattr(self, 'df_peso_filtrado', self.dados_peso).copy()
         
         st.markdown("### ⚖️ Análise de Peso das Notas")
         
@@ -187,14 +301,14 @@ class VizReceitas:
         
         with col1:
             # Gráfico de pizza
-            total_leves = df['NOTAS_LEVES'].sum()
-            total_pesadas = df['NOTAS_PESADAS'].sum()
+            total_leves = df['NOTAS_LEVES'].sum() if 'NOTAS_LEVES' in df.columns else 0
+            total_pesadas = df['NOTAS_PESADAS'].sum() if 'NOTAS_PESADAS' in df.columns else 0
             
             fig = go.Figure(data=[go.Pie(
                 labels=['Notas Leves', 'Notas Pesadas'],
                 values=[total_leves, total_pesadas],
                 hole=0.4,
-                marker=dict(colors=['#667eea', '#764ba2']),
+                marker=dict(colors=['#FFFFFF', '#413F3F']),
                 textinfo='label+percent+value',
                 textfont=dict(size=14)
             )])
@@ -215,14 +329,18 @@ class VizReceitas:
                 x=df['DATA'],
                 y=df['NOTAS_LEVES'],
                 name='Leves',
-                marker_color='#667eea'
+                marker_color="#FFFFFF",
+                text=df['NOTAS_LEVES'],        # Rótulos
+                textposition='inside'          # Pode ser 'outside', 'auto', 'inside'
             ))
             
             fig.add_trace(go.Bar(
                 x=df['DATA'],
                 y=df['NOTAS_PESADAS'],
                 name='Pesadas',
-                marker_color='#764ba2'
+                marker_color="#413F3F",
+                text=df['NOTAS_PESADAS'],      # Rótulos
+                textposition='inside'
             ))
             
             fig.update_layout(
@@ -230,16 +348,23 @@ class VizReceitas:
                 barmode='stack',
                 hovermode='x unified',
                 plot_bgcolor='rgba(0,0,0,0)',
-                xaxis=dict(showgrid=False),
+                xaxis=dict(showgrid=False, tickangle=-45, tickmode='auto'),
                 yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)', title='Quantidade'),
-                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+                legend=dict(
+                    orientation="h",
+                    yanchor="top",
+                    y=-0.28,
+                    xanchor="center",
+                    x=0.5
+                ),
+                margin=dict(t=20, b=90, l=40, r=20)  # espaço extra embaixo pro legend
             )
             
             st.plotly_chart(fig, use_container_width=True)
 
     def show_faturamento_analysis(self):
         """Análise de faturamento por tipo de nota"""
-        df = self.dados_peso.copy()
+        df = getattr(self, 'df_peso_filtrado', self.dados_peso).copy()
         
         col1, col2 = st.columns(2)
         
@@ -247,8 +372,8 @@ class VizReceitas:
             st.markdown("### 💵 Faturamento por Tipo")
             
             # Calcular totais
-            fat_leve_total = df['FAT_NOTA_LEVE'].sum()
-            fat_pesada_total = df['FAT_NOTA_PESADA'].sum()
+            fat_leve_total = df['FAT_NOTA_LEVE'].sum() if 'FAT_NOTA_LEVE' in df.columns else 0
+            fat_pesada_total = df['FAT_NOTA_PESADA'].sum() if 'FAT_NOTA_PESADA' in df.columns else 0
             
             fig = go.Figure()
             
@@ -256,7 +381,7 @@ class VizReceitas:
                 x=['Notas Leves', 'Notas Pesadas'],
                 y=[fat_leve_total, fat_pesada_total],
                 marker=dict(
-                    color=['#667eea', '#764ba2'],
+                    color=["#d4d6de", "#363537"],
                     line=dict(color='white', width=2)
                 ),
                 text=[f'R$ {fat_leve_total:,.0f}', f'R$ {fat_pesada_total:,.0f}'],
@@ -265,7 +390,7 @@ class VizReceitas:
             ))
             
             # Ajustar range do eixo Y para dar espaço aos rótulos
-            y_max = max(fat_leve_total, fat_pesada_total) * 1.25
+            y_max = max(fat_leve_total, fat_pesada_total) * 1.25 if max(fat_leve_total, fat_pesada_total) > 0 else 1
             
             fig.update_layout(
                 height=400,
@@ -287,8 +412,8 @@ class VizReceitas:
             st.markdown("### 📊 Ticket Médio por Tipo")
             
             # Calcular tickets médios
-            ticket_leve = fat_leve_total / df['NOTAS_LEVES'].sum() if df['NOTAS_LEVES'].sum() > 0 else 0
-            ticket_pesada = fat_pesada_total / df['NOTAS_PESADAS'].sum() if df['NOTAS_PESADAS'].sum() > 0 else 0
+            ticket_leve = fat_leve_total / df['NOTAS_LEVES'].sum() if 'NOTAS_LEVES' in df.columns and df['NOTAS_LEVES'].sum() > 0 else 0
+            ticket_pesada = fat_pesada_total / df['NOTAS_PESADAS'].sum() if 'NOTAS_PESADAS' in df.columns and df['NOTAS_PESADAS'].sum() > 0 else 0
             
             fig = go.Figure()
             
@@ -296,7 +421,7 @@ class VizReceitas:
                 x=['Ticket Médio Leve', 'Ticket Médio Pesada'],
                 y=[ticket_leve, ticket_pesada],
                 marker=dict(
-                    color=['#667eea', '#764ba2'],
+                    color=['#d4d6de', '#363537'],
                     line=dict(color='white', width=2)
                 ),
                 text=[f'R$ {ticket_leve:,.2f}', f'R$ {ticket_pesada:,.2f}'],
@@ -305,7 +430,7 @@ class VizReceitas:
             ))
             
             # Ajustar range do eixo Y para dar espaço aos rótulos
-            y_max = max(ticket_leve, ticket_pesada) * 1.25
+            y_max = max(ticket_leve, ticket_pesada) * 1.25 if max(ticket_leve, ticket_pesada) > 0 else 1
             
             fig.update_layout(
                 height=400,
@@ -325,7 +450,7 @@ class VizReceitas:
 
     def show_despesas_breakdown(self):
         """Análise de despesas"""
-        df = self.dados_despesas.copy()
+        df = getattr(self, 'df_desp_filtrado', self.dados_despesas).copy()
         
         if 'CATEGORIA' in df.columns or 'TIPO' in df.columns:
             st.markdown("### 💸 Breakdown de Despesas")
@@ -344,7 +469,7 @@ class VizReceitas:
                     x=categoria_col,
                     y='VALOR',
                     color='VALOR',
-                    color_continuous_scale=['#667eea', '#764ba2'],
+                    color_continuous_scale=["#df9898", "#a24b4b"],
                     title='Despesas por Categoria',
                     text='VALOR'
                 )
@@ -356,7 +481,7 @@ class VizReceitas:
                 )
                 
                 # Ajustar range do eixo Y para dar espaço aos rótulos
-                y_max = despesas_cat['VALOR'].max() * 1.25
+                y_max = despesas_cat['VALOR'].max() * 1.25 if despesas_cat['VALOR'].max() > 0 else 1
                 
                 fig.update_layout(
                     height=400,
@@ -378,7 +503,7 @@ class VizReceitas:
                 # Top 5 maiores despesas
                 st.markdown("#### 🔝 Top 5 Maiores Despesas")
                 top_despesas = df.nlargest(5, 'VALOR')[[categoria_col, 'VALOR', 'DATA']]
-                top_despesas['DATA'] = top_despesas['DATA'].dt.strftime('%Y-%m-%d')
+                top_despesas['DATA'] = pd.to_datetime(top_despesas['DATA']).dt.strftime('%Y-%m-%d')
                 
                 for idx, row in top_despesas.iterrows():
                     st.markdown(f"""
@@ -396,8 +521,8 @@ class VizReceitas:
         tab1, tab2, tab3 = st.tabs(["💰 Receitas", "💸 Despesas", "⚖️ Peso das Notas"])
         
         with tab1:
-            df_to_show_receitas = self.dados_receitas.copy()
-            df_to_show_receitas['DATA'] = df_to_show_receitas['DATA'].dt.strftime('%Y-%m-%d')
+            df_to_show_receitas = getattr(self, 'df_rec_filtrado', self.dados_receitas).copy()
+            df_to_show_receitas['DATA'] = pd.to_datetime(df_to_show_receitas['DATA']).dt.strftime('%Y-%m-%d')
             st.dataframe(
                 df_to_show_receitas.sort_values('DATA', ascending=False),
                 use_container_width=True,
@@ -405,8 +530,9 @@ class VizReceitas:
             )
             
         with tab2:
-            df_to_show_despesas = self.dados_despesas.copy()
-            df_to_show_despesas['DATA'] = df_to_show_despesas['DATA'].dt.strftime('%Y-%m-%d')
+            df_to_show_despesas = getattr(self, 'df_desp_filtrado', self.dados_despesas).copy()
+            if 'DATA' in df_to_show_despesas.columns:
+                df_to_show_despesas['DATA'] = pd.to_datetime(df_to_show_despesas['DATA']).dt.strftime('%Y-%m-%d')
             st.dataframe(
                 df_to_show_despesas.sort_values('DATA', ascending=False) if 'DATA' in df_to_show_despesas.columns else df_to_show_despesas,
                 use_container_width=True,
@@ -414,8 +540,8 @@ class VizReceitas:
             )
             
         with tab3:
-            df_to_show_peso_notas = self.dados_peso.copy()
-            df_to_show_peso_notas['DATA'] = df_to_show_peso_notas['DATA'].dt.strftime('%Y-%m-%d')
+            df_to_show_peso_notas = getattr(self, 'df_peso_filtrado', self.dados_peso).copy()
+            df_to_show_peso_notas['DATA'] = pd.to_datetime(df_to_show_peso_notas['DATA']).dt.strftime('%Y-%m-%d')
             st.dataframe(
                 df_to_show_peso_notas.sort_values('DATA', ascending=False),
                 use_container_width=True,
@@ -425,20 +551,37 @@ class VizReceitas:
     def render(self):
         """Renderiza todo o dashboard"""
         self.set_title()
+
+        # Período global agora no topo — afeta todas as visões
+        col1, col2, col3 = st.columns([2, 2, 6])
+        with col1:
+            self.periodo = st.selectbox("Período", ["Últimos 3 dias","Últimos 7 dias", "Últimos 14 dias","Últimos 30 dias", "Últimos 90 dias", "Todo período"], key="global_periodo")
+
+        # aplicar filtro global
+        self.apply_period_filter()
+
         if st.button("🔄 Atualizar dados"):
             st.cache_data.clear()
             st.cache_resource.clear()
             with st.spinner("Carregando dados do banco..."):
                 self.reload_data()
+                # reaplicar filtro após recarregar dados
+                self.apply_period_filter()
             st.success("Dados atualizados com sucesso!")
             st.rerun()
 
         self.show_kpis()
+        
         self.show_receitas_evolution()
-        self.show_notas_analysis()
-        self.show_faturamento_analysis()
+        self.show_despesas_evolution()
         self.show_despesas_breakdown()
+    
+        self.show_faturamento_analysis()
+        self.show_notas_analysis()
+     
         st.markdown("---")
         self.show_data_table()
         st.markdown(
     f"🕒 **Última atualização:** {self.last_update.strftime('%d/%m/%Y %H:%M:%S')}")
+
+
