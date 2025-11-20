@@ -27,7 +27,7 @@ class VizReceitas:
             self.dados_despesas['DATA'] = pd.to_datetime(self.dados_despesas['DATA'])
         self.dados_peso['DATA'] = pd.to_datetime(self.dados_peso['DATA'])
 
-        self.last_update = datetime.now()
+        self.last_update = datetime.now() - timedelta(hours=3)
         
     def set_title(self):
         st.set_page_config(page_title="Dashboard Financeiro", layout="wide", initial_sidebar_state="expanded")
