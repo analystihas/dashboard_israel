@@ -1,0 +1,15 @@
+[project]
+name = "dashboard-israel"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "db-dtypes>=1.4.4",
+    "google-cloud-bigquery>=3.38.0",
+    "google-cloud-storage>=3.6.0",
+    "ipykernel>=7.1.0",
+    "plotly>=6.5.0",
+    "python-dotenv>=1.2.1",
+    "streamlit>=1.51.0",
+]
