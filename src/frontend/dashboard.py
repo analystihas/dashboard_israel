@@ -21,6 +21,18 @@ class VizReceitas:
         self.dados_receitas = dados_receitas
         self.dados_despesas = dados_despesas
         self.dados_peso = dados_peso_notas
+
+
+    def reload_data(self):
+        business_data = BusinessData()
+        self.dados_receitas = business_data.get_receitas()
+        self.dados_despesas = business_data.get_despesas()
+        self.dados_peso = business_data.get_peso_notas()
+        # garantir tipos
+        self.dados_receitas['DATA'] = pd.to_datetime(self.dados_receitas['DATA'])
+        if 'DATA' in self.dados_despesas.columns:
+            self.dados_despesas['DATA'] = pd.to_datetime(self.dados_despesas['DATA'])
+        self.dados_peso['DATA'] = pd.to_datetime(self.dados_peso['DATA'])
         
     def set_title(self):
         st.set_page_config(page_title="Dashboard Financeiro", layout="wide", initial_sidebar_state="expanded")
@@ -411,6 +423,9 @@ class VizReceitas:
     def render(self):
         """Renderiza todo o dashboard"""
         self.set_title()
+        if st.button("🔄 Atualizar dados"):
+            self.reload_data()
+            st.rerun() 
         self.show_kpis()
         self.show_receitas_evolution()
         self.show_notas_analysis()

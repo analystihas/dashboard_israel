@@ -39,3 +39,21 @@ def get_bigquery_client():
         client = bigquery.Client(project=project_id)
         
         return client
+    
+
+def access_db_for_test():
+    load_dotenv()
+
+    project_id = os.getenv("PROJECT_ID")
+    secret_path = os.getenv("SECRET_PATH")
+
+    if not project_id:
+        raise ValueError("PROJECT_ID não encontrado")
+
+    if not secret_path or not os.path.exists(secret_path):
+        raise ValueError("SECRET_PATH inválido ou arquivo não encontrado")
+
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = secret_path
+    client = bigquery.Client(project=project_id)
+
+    return client
