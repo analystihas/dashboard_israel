@@ -103,12 +103,13 @@ class VizReceitas:
         total_receitas = df_rec['VALOR_TOTAL'].sum()
         total_despesas = df_desp['VALOR'].sum() if 'VALOR' in df_desp.columns else 0
         lucro = total_receitas - total_despesas
+        margem = lucro / total_receitas * 100 if total_receitas > 0 else 0
         total_notas = df_rec['NOTAS_REALIZADAS'].sum() if 'NOTAS_REALIZADAS' in df_rec.columns else 0
         ticket_medio = total_receitas / total_notas if total_notas > 0 else 0
         
         # Exibir KPIs
         st.markdown("### 📈 Indicadores Principais")
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
             st.metric(
@@ -137,6 +138,12 @@ class VizReceitas:
                 label="🎯 Ticket Médio",
                 value=f"R$ {ticket_medio:,.2f}",
                # delta=f"{total_notas:.0f} notas"
+            )
+        with col5:
+            st.metric(
+                label="📈 Margem de Lucro",
+                value=f"{margem:.2f}%",
+               # delta=f"{margem:.2f}%" if total_receitas > 0 else None
             )
         
         st.markdown("---")
@@ -210,10 +217,6 @@ class VizReceitas:
             st.metric("Maior Receita", f"R$ {receita_max:,.2f}")
             st.metric("Menor Receita", f"R$ {receita_min:,.2f}")
 
-            # if len(df) > 1 and df['VALOR_TOTAL'].iloc[0] != 0:
-            #     crescimento = ((df['VALOR_TOTAL'].iloc[-1] / df['VALOR_TOTAL'].iloc[0]) - 1) * 100
-            #     st.metric("Crescimento", f"{crescimento:+.1f}%")
-
 
     def show_despesas_evolution(self):
         """Gráfico de evolução das receitas"""
@@ -286,11 +289,194 @@ class VizReceitas:
             st.metric("Maior Despesa", f"R$ {despesa_max:,.2f}")
             st.metric("Menor Despesa", f"R$ {despesa_min:,.2f}")
 
-            # if len(df) > 1 and df['VALOR'].iloc[0] != 0:
-            #     crescimento = ((df['VALOR'].iloc[-1] / df['VALOR'].iloc[0]) - 1) * 100
-            #     st.metric("Crescimento", f"{crescimento:+.1f}%")
 
-
+    def show_weekday_analysis(self):
+        """Análise de receitas e despesas por dia da semana"""
+        import locale
+        
+        # Tentar configurar locale para pt_BR (pode falhar em alguns sistemas)
+        try:
+            locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
+        except:
+            pass
+        
+        df_rec = getattr(self, 'df_rec_filtrado', self.dados_receitas).copy()
+        df_desp = getattr(self, 'df_desp_filtrado', self.dados_despesas).copy()
+        
+        # Mapeamento manual de dias da semana em português
+        dias_semana = {
+            0: 'Segunda',
+            1: 'Terça',
+            2: 'Quarta',
+            3: 'Quinta',
+            4: 'Sexta',
+            5: 'Sábado',
+            6: 'Domingo'
+        }
+        
+        # Garantir que DATA é datetime
+        df_rec['DATA'] = pd.to_datetime(df_rec['DATA'])
+        df_desp['DATA'] = pd.to_datetime(df_desp['DATA'])
+        
+        # Extrair dia da semana (0=Segunda, 6=Domingo)
+        df_rec['DIA_SEMANA'] = df_rec['DATA'].dt.dayofweek
+        df_rec['DIA_SEMANA_NOME'] = df_rec['DIA_SEMANA'].map(dias_semana)
+        
+        df_desp['DIA_SEMANA'] = df_desp['DATA'].dt.dayofweek
+        df_desp['DIA_SEMANA_NOME'] = df_desp['DIA_SEMANA'].map(dias_semana)
+        
+        # Agrupar por dia da semana usando MÉDIA
+        receitas_por_dia = df_rec.groupby('DIA_SEMANA_NOME')['VALOR_TOTAL'].mean().reindex(dias_semana.values(), fill_value=0)
+        despesas_por_dia = df_desp.groupby('DIA_SEMANA_NOME')['VALOR'].mean().reindex(dias_semana.values(), fill_value=0)
+        
+        # Calcular quantidade média de notas por dia
+        notas_por_dia = df_rec.groupby('DIA_SEMANA_NOME')['NOTAS_REALIZADAS'].mean().reindex(dias_semana.values(), fill_value=0) if 'NOTAS_REALIZADAS' in df_rec.columns else pd.Series(0, index=dias_semana.values())
+        
+        st.markdown("### 📅 Análise por Dia da Semana")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Gráfico de receitas e despesas por dia da semana
+            fig = go.Figure()
+            
+            fig.add_trace(go.Bar(
+                x=receitas_por_dia.index,
+                y=receitas_por_dia.values,
+                name='Receitas',
+                marker_color='#4caf50',
+                text=[f'R$ {val:,.0f}' for val in receitas_por_dia.values],
+                textposition='outside',
+                textfont=dict(size=10)
+            ))
+            
+            fig.add_trace(go.Bar(
+                x=despesas_por_dia.index,
+                y=despesas_por_dia.values,
+                name='Despesas',
+                marker_color='#f44336',
+                text=[f'R$ {val:,.0f}' for val in despesas_por_dia.values],
+                textposition='outside',
+                textfont=dict(size=10)
+            ))
+            
+            y_max = max(receitas_por_dia.max(), despesas_por_dia.max()) * 1.2 if max(receitas_por_dia.max(), despesas_por_dia.max()) > 0 else 1
+            
+            fig.update_layout(
+                title='Receitas vs Despesas Médias por Dia',
+                height=400,
+                barmode='group',
+                plot_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showgrid=False, title='Dia da Semana'),
+                yaxis=dict(
+                    showgrid=True, 
+                    gridcolor='rgba(128,128,128,0.2)', 
+                    title='Valor (R$)',
+                    range=[0, y_max]
+                ),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="center",
+                    x=0.5
+                ),
+                margin=dict(t=80, b=60, l=60, r=40)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # Gráfico de lucro por dia da semana
+            lucro_por_dia = receitas_por_dia - despesas_por_dia
+            
+            # Cores baseadas em lucro positivo/negativo
+            cores = ['#4caf50' if val >= 0 else '#f44336' for val in lucro_por_dia.values]
+            
+            fig = go.Figure()
+            
+            fig.add_trace(go.Bar(
+                x=lucro_por_dia.index,
+                y=lucro_por_dia.values,
+                marker_color=cores,
+                text=[f'R$ {val:,.0f}' for val in lucro_por_dia.values],
+                textposition='outside',
+                textfont=dict(size=10),
+                showlegend=False
+            ))
+            
+            # Calcular range do eixo Y considerando valores positivos e negativos
+            y_abs_max = abs(lucro_por_dia).max() * 1.2 if abs(lucro_por_dia).max() > 0 else 1
+            
+            fig.update_layout(
+                title='Lucro Líquido Médio por Dia',
+                height=400,
+                plot_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showgrid=False, title='Dia da Semana'),
+                yaxis=dict(
+                    showgrid=True, 
+                    gridcolor='rgba(128,128,128,0.2)', 
+                    title='Lucro (R$)',
+                    range=[-y_abs_max, y_abs_max],
+                    zeroline=True,
+                    zerolinecolor='white',
+                    zerolinewidth=2
+                ),
+                margin=dict(t=80, b=60, l=60, r=40)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Estatísticas por dia da semana
+        st.markdown("### 📊 Estatísticas Detalhadas por Dia")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        # Melhor dia (maior receita)
+        melhor_dia = receitas_por_dia.idxmax() if receitas_por_dia.sum() > 0 else "N/A"
+        melhor_receita = receitas_por_dia.max() if receitas_por_dia.sum() > 0 else 0
+        
+        # Pior dia (menor receita, excluindo zeros)
+        receitas_nao_zero = receitas_por_dia[receitas_por_dia > 0]
+        pior_dia = receitas_nao_zero.idxmin() if len(receitas_nao_zero) > 0 else "N/A"
+        pior_receita = receitas_nao_zero.min() if len(receitas_nao_zero) > 0 else 0
+        
+        # Dia com mais notas
+        dia_mais_notas = notas_por_dia.idxmax() if notas_por_dia.sum() > 0 else "N/A"
+        qtd_mais_notas = notas_por_dia.max() if notas_por_dia.sum() > 0 else 0
+        
+        # Dia com maior lucro
+        dia_maior_lucro = lucro_por_dia.idxmax() if lucro_por_dia.sum() != 0 else "N/A"
+        maior_lucro = lucro_por_dia.max() if lucro_por_dia.sum() != 0 else 0
+        
+        with col1:
+            st.metric(
+                label="🏆 Melhor Dia (Receita Média)",
+                value=melhor_dia,
+                delta=f"R$ {melhor_receita:,.2f}"
+            )
+        
+        with col2:
+            st.metric(
+                label="📉 Menor Receita Média",
+                value=pior_dia,
+                delta=f"R$ {pior_receita:,.2f}",
+                delta_color="inverse"
+            )
+        
+        with col3:
+            st.metric(
+                label="📝 Mais Notas (Média)",
+                value=dia_mais_notas,
+                delta=f"{qtd_mais_notas:.1f} notas"
+            )
+        
+        with col4:
+            st.metric(
+                label="💰 Maior Lucro Médio",
+                value=dia_maior_lucro,
+                delta=f"R$ {maior_lucro:,.2f}"
+            )
     def show_notas_analysis(self):
         """Análise de notas leves vs pesadas"""
         df = getattr(self, 'df_peso_filtrado', self.dados_peso).copy()
@@ -575,7 +761,7 @@ class VizReceitas:
         self.show_receitas_evolution()
         self.show_despesas_evolution()
         self.show_despesas_breakdown()
-    
+        self.show_weekday_analysis()
         self.show_faturamento_analysis()
         self.show_notas_analysis()
      
