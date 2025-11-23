@@ -114,29 +114,29 @@ class VizReceitas:
             st.metric(
                 label="💰 Receita Total",
                 value=f"R$ {total_receitas:,.2f}",
-                delta=f"{(total_receitas/1000000):.1f}M" if total_receitas > 1000000 else None
+               # delta=f"{(total_receitas/1000000):.1f}M" if total_receitas > 1000000 else None
             )
         
         with col2:
             st.metric(
                 label="💸 Despesas",
                 value=f"R$ {total_despesas:,.2f}",
-                delta=f"-{(total_despesas/total_receitas*100):.1f}%" if total_receitas > 0 else None,
-                delta_color="inverse"
+               # delta=f"-{(total_despesas/total_receitas*100):.1f}%" if total_receitas > 0 else None,
+                #delta_color="inverse"
             )
         
         with col3:
             st.metric(
                 label="📊 Lucro Líquido",
                 value=f"R$ {lucro:,.2f}",
-                delta=f"{(lucro/total_receitas*100):.1f}% margem" if total_receitas > 0 else None
+                #delta=f"{(lucro/total_receitas*100):.1f}% margem" if total_receitas > 0 else None
             )
         
         with col4:
             st.metric(
                 label="🎯 Ticket Médio",
                 value=f"R$ {ticket_medio:,.2f}",
-                delta=f"{total_notas:.0f} notas"
+               # delta=f"{total_notas:.0f} notas"
             )
         
         st.markdown("---")
@@ -210,9 +210,9 @@ class VizReceitas:
             st.metric("Maior Receita", f"R$ {receita_max:,.2f}")
             st.metric("Menor Receita", f"R$ {receita_min:,.2f}")
 
-            if len(df) > 1 and df['VALOR_TOTAL'].iloc[0] != 0:
-                crescimento = ((df['VALOR_TOTAL'].iloc[-1] / df['VALOR_TOTAL'].iloc[0]) - 1) * 100
-                st.metric("Crescimento", f"{crescimento:+.1f}%")
+            # if len(df) > 1 and df['VALOR_TOTAL'].iloc[0] != 0:
+            #     crescimento = ((df['VALOR_TOTAL'].iloc[-1] / df['VALOR_TOTAL'].iloc[0]) - 1) * 100
+            #     st.metric("Crescimento", f"{crescimento:+.1f}%")
 
 
     def show_despesas_evolution(self):
@@ -286,9 +286,9 @@ class VizReceitas:
             st.metric("Maior Despesa", f"R$ {despesa_max:,.2f}")
             st.metric("Menor Despesa", f"R$ {despesa_min:,.2f}")
 
-            if len(df) > 1 and df['VALOR'].iloc[0] != 0:
-                crescimento = ((df['VALOR'].iloc[-1] / df['VALOR'].iloc[0]) - 1) * 100
-                st.metric("Crescimento", f"{crescimento:+.1f}%")
+            # if len(df) > 1 and df['VALOR'].iloc[0] != 0:
+            #     crescimento = ((df['VALOR'].iloc[-1] / df['VALOR'].iloc[0]) - 1) * 100
+            #     st.metric("Crescimento", f"{crescimento:+.1f}%")
 
 
     def show_notas_analysis(self):
