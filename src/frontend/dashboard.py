@@ -66,8 +66,6 @@ class VizReceitas:
         hoje = pd.Timestamp.now()
         if self.periodo == "Últimos 7 dias":
             data_inicio = hoje - timedelta(days=7)
-        elif self.periodo == 'Últimos 3 dias':
-            data_inicio = hoje - timedelta(days=3)
         elif self.periodo == 'Últimos 14 dias':
             data_inicio = hoje - timedelta(days=14)
         elif self.periodo == "Últimos 30 dias":
@@ -741,7 +739,7 @@ class VizReceitas:
         # Período global agora no topo — afeta todas as visões
         col1, col2, col3 = st.columns([2, 2, 6])
         with col1:
-            self.periodo = st.selectbox("Período", ["Últimos 3 dias","Últimos 7 dias", "Últimos 14 dias","Últimos 30 dias", "Últimos 90 dias", "Todo período"], key="global_periodo")
+            self.periodo = st.selectbox("Período", ["Últimos 7 dias", "Últimos 14 dias","Últimos 30 dias", "Últimos 90 dias", "Todo período"], key="global_periodo")
 
         # aplicar filtro global
         self.apply_period_filter()
